@@ -1,0 +1,104 @@
+#!/usr/bin/env python
+
+import sys
+import svgwrite
+
+NOTCH_WIDTH = 1/16
+NOTCH_HEIGHT = 1/16
+MARGIN = 2
+TOTAL_HEIGHT = 5 # total width is computed programmatically later on
+STROKE_WIDTH = 0.25 / 72 # 0.25 points converted to inches
+
+FRET_SAW_KERF = 0.023 # 0.023 inches
+
+# NOTCH_WIDTH = FRET_SAW_KERF
+
+# Validate command line arguments
+if len(sys.argv) != 3:
+    # print usage message to stderr
+    sys.stderr.write("Usage: python fretcalc.py <scale> <total_frets>\n")
+    sys.exit(1)
+
+try:
+    scale = float(sys.argv[1])
+    total_frets = int(sys.argv[2])
+except ValueError:
+    sys.stderr.write("Error: scale must be a number and total_frets must be an integer\n")
+    sys.exit(1)
+
+if scale <= 0 or total_frets <= 0:
+    sys.stderr.write("Error: scale and total_frets must be positive\n")
+    sys.exit(1)
+
+def fret_positions(scale, total_frets):
+    k = 17.817
+    temp_scale = scale
+    positions = []
+
+    for i in range(total_frets):
+        p = temp_scale / k
+        positions.append(p)
+        temp_scale -= p
+    
+    return positions
+
+def notch_path():
+    path_data = []
+    path_data.append(f"v {-NOTCH_WIDTH}")
+    # path_data.append(f"h {NOTCH_WIDTH}")
+    path_data.append(f"h {NOTCH_WIDTH}")
+    path_data.append(f"v {NOTCH_WIDTH}")
+    return path_data
+
+positions = fret_positions(scale, total_frets)
+positions[0] = positions[0] + (FRET_SAW_KERF / 2)
+
+# sum of all positions
+total_width = sum(positions) + 2
+total_width += NOTCH_WIDTH * 1.5 # full width of zero notch, plus half of the width of the last notch
+total_width += MARGIN * 2
+
+# Create an SVG drawing
+dwg = svgwrite.Drawing(
+    f"{scale}in_template".replace('.', '_') + '.svg',
+    profile='tiny',
+    size=(f'{total_width}in', f'{TOTAL_HEIGHT}in'),
+    viewBox=f'0 0 {total_width} {TOTAL_HEIGHT}'
+)
+
+path_data = []
+
+path_data.append(f"M 1 {TOTAL_HEIGHT - 1}")
+# path_data.append(f"V 0") # left edge
+path_data.append(f"h {MARGIN}")
+path_data += notch_path()
+
+for position in positions:
+    position -= (NOTCH_WIDTH)
+    path_data.append(f"h {position}")
+    path_data += notch_path()
+
+# finish things up
+path_data.append(f"h {MARGIN}")
+path_data.append(f"v {2-TOTAL_HEIGHT}")
+path_data.append("H 1 1")
+
+# Close the path
+path_data.append("Z")
+
+# Join the path commands into a single string
+path_string = " ".join(path_data)
+
+# Add the path to the drawing
+dwg.add(dwg.path(d=path_string, stroke='red', fill='none', stroke_width=f'{STROKE_WIDTH}'))
+
+
+# Make a centerline
+dwg.add(dwg.line(start=(1,(TOTAL_HEIGHT / 2)), end=(1 + total_width - 2, (TOTAL_HEIGHT/ 2)), stroke='blue', stroke_width=f'{STROKE_WIDTH}'))
+
+# Save the SVG file
+dwg.save()
+
+
+
+
